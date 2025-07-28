@@ -4,9 +4,22 @@ services:
     links:
       - postgres-db
     ports:
-      - "${API_PORT}:${API_PORT}"
+      - "${API_GATEWAY_PORT}:${API_GATEWAY_PORT}"
     environment:
-      - API_PORT=${API_PORT}
+      - API_GATEWAY_PORT=${API_GATEWAY_PORT}
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+  api_sensors:
+    build: ./API_SENSORS
+    links:
+      - postgres-db
+    ports:
+      - "${API_SENSORS_PORT}:${API_SENSORS_PORT}"
+    environment:
+      - API_SENSORS_PORT=${API_SENSORS_PORT}
       - DB_HOST=${DB_HOST}
       - DB_PORT=${DB_PORT}
       - DB_USER=${DB_USER}

@@ -1,0 +1,15 @@
+{
+  "name": "api-sensors",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node --watch server.js"
+  },
+  "author": "Carlos Galindo",
+  "license": "ISC",
+  "description": "",
+  "devDependencies": {
+  },
+  "dependencies": {
+  }
+}
