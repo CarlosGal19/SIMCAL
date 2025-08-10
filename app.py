@@ -8,14 +8,15 @@ from sklearn.metrics import roc_auc_score
 import psycopg2
 import time
 from datetime import datetime
+from flask import Flask, request, jsonify
 import os
 
-# Conexión a PostgreSQL con manejo de excepciones
+# Configuración de la conexión a PostgreSQL
 try:
     conn = psycopg2.connect(
         dbname="sensor_db",
-        user="your_username",
-        password="your_password",
+        user="postgres",
+        password="root",
         host="localhost",
         port="5432"
     )
@@ -35,16 +36,17 @@ def create_model(input_shape):
     model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
     return model
 
-while True:
+# Función para entrenar y guardar el modelo
+def train_and_save_model():
+    global imputer, scaler
     try:
-        # Obtener los datos más recientes (últimos 100 registros)
-        query = "SELECT * FROM sensor_data ORDER BY timestamp DESC LIMIT 100"
+        # Obtener los últimos 1000 datos
+        query = "SELECT vibracion, temperatura, corriente, fallo FROM sensor_data ORDER BY timestamp DESC LIMIT 1000"
         df = pd.read_sql_query(query, conn)
 
         if df.empty or len(df) < 20:  # Mínimo 20 registros para entrenamiento
-            print(f"[{datetime.now().strftime('%Y%m%d_%H%M%S')}] No hay suficientes datos. Esperando...")
-            time.sleep(60)
-            continue
+            print(f"[{datetime.now().strftime('%Y%m%d_%H%M%S')}] No hay suficientes datos para entrenamiento.")
+            return
 
         # Limpiar y convertir la columna 'fallo' a entero
         df['fallo'] = df['fallo'].apply(lambda x: int(x) if str(x).replace(' ', '').isdigit() else 0)
@@ -85,17 +87,47 @@ while True:
         predictions = (model.predict(X_full, verbose=0) > 0.5).astype(int)
         print(f"[{datetime.now().strftime('%Y%m%d_%H%M%S')}] Predicciones (muestra de 5 registros):")
         for i in range(min(5, len(df))):
-            print(f"- Timestamp: {df['timestamp'].iloc[i]}, Vibración: {df['vibracion'].iloc[i]:.2f}, "
-                  f"Temperatura: {df['temperatura'].iloc[i]:.2f}, Corriente: {df['corriente'].iloc[i]:.2f}, "
-                  f"Fallo: {df['fallo'].iloc[i]}, Predicción: {predictions[i][0]}")
+            print(f"- Vibración: {df['vibracion'].iloc[i]:.2f}, Temperatura: {df['temperatura'].iloc[i]:.2f}, "
+                  f"Corriente: {df['corriente'].iloc[i]:.2f}, Fallo: {df['fallo'].iloc[i]}, Predicción: {predictions[i][0]}")
 
     except Exception as e:
-        print(f"[{datetime.now().strftime('%Y%m%d_%H%M%S')}] Error: {str(e)}")
-        time.sleep(60)
-        continue
+        print(f"[{datetime.now().strftime('%Y%m%d_%H%M%S')}] Error en entrenamiento: {str(e)}")
 
-    # Esperar 1 minuto
-    time.sleep(60)
+# Inicializar Flask
+app = Flask(__name__)
 
-# Cerrar conexión al finalizar
-conn.close()
+# Inicializar transformadores globales (se actualizarán con los del entrenamiento)
+imputer = IterativeImputer(max_iter=10, random_state=42)
+scaler = StandardScaler()
+
+# Entrenar el modelo al iniciar el script (ejecución manual)
+if __name__ == '__main__':
+    train_and_save_model()
+    app.run(debug=True, host='0.0.0.0', port=5000)
+
+@app.route('/predict', methods=['POST'])
+def predict():
+    try:
+        # Obtener datos del request
+        data = request.get_json()
+        if not data or 'vibracion' not in data or 'temperatura' not in data or 'corriente' not in data:
+            return jsonify({'error': 'Datos incompletos. Se requieren vibracion, temperatura y corriente.'}), 400
+
+        # Convertir datos a formato numpy
+        input_data = np.array([[data['vibracion'], data['temperatura'], data['corriente']]])
+
+        # Cargar el modelo más reciente
+        model = keras.models.load_model('model.h5')
+
+        # Imputar y escalar datos usando los transformadores globales
+        input_data_imputed = imputer.transform(input_data)
+        input_data_scaled = scaler.transform(input_data_imputed)
+
+        # Realizar predicción
+        prediction_prob = model.predict(input_data_scaled, verbose=0)
+        prediction = (prediction_prob > 0.5).astype(int)[0][0]
+
+        return jsonify({'prediction': int(prediction), 'probability': float(prediction_prob[0][0])})
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
