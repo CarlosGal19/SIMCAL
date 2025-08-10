@@ -40,8 +40,8 @@ def create_model(input_shape):
 def train_and_save_model():
     global imputer, scaler
     try:
-        # Obtener los últimos 1000 datos
-        query = "SELECT vibracion, temperatura, corriente, fallo FROM sensor_data ORDER BY timestamp DESC LIMIT 1000"
+        # Obtener todos los datos disponibles
+        query = "SELECT vibracion, temperatura, corriente, fallo FROM sensor_data"
         df = pd.read_sql_query(query, conn)
 
         if df.empty or len(df) < 20:  # Mínimo 20 registros para entrenamiento
