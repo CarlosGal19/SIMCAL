@@ -1,4 +1,6 @@
 numpy
 pandas
+tensorflow
 scikit-learn
-xgboost
+flask
+python-dateutil
